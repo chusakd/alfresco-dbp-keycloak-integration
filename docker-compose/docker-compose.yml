@@ -114,7 +114,7 @@ services:
             POSTGRES_USER: alfresco
             POSTGRES_PASSWORD: alfresco
         ports:
-            - "8080:8080"
+            - "8081:8081"
         depends_on:
             - postgres
 
