@@ -21,8 +21,16 @@ services:
         image: quay.io/alfresco/alfresco-content-repository:7.3.0
         mem_limit: 1900m
         environment:
+            IDENTITY_SERVICE_URI: "https://alfresco-identity-service.REPLACEME/auth"
             JAVA_TOOL_OPTIONS: -Dencryption.keystore.type=JCEKS -Dencryption.cipherAlgorithm=DESede/CBC/PKCS5Padding -Dencryption.keyAlgorithm=DESede -Dencryption.keystore.location=/usr/local/tomcat/shared/classes/alfresco/extension/keystore/keystore -Dmetadata-keystore.password=mp6yc0UD9e -Dmetadata-keystore.aliases=metadata -Dmetadata-keystore.metadata.password=oKIWzVdEdA -Dmetadata-keystore.metadata.algorithm=DESede
-            JAVA_OPTS: "-Ddb.driver=org.postgresql.Driver
+            JAVA_OPTS: "-Daims.enabled=true
+                -Daims.realm=alfresco
+                -Daims.resource=alfresco
+                -Daims.publicClient=true
+                -Daims.authServerUrl=\"https://alfresco-identity-service.REPLACEME/auth\"
+                -Dsaml.keystore.location=/usr/local/tomcat/keystore/saml.keystore
+                -Dsaml.keystore.keyMetaData.location=/usr/local/tomcat/keystore/saml-keystore-passwords.properties
+                -Ddb.driver=org.postgresql.Driver
                 -Ddb.username=alfresco
                 -Ddb.password=alfresco
                 -Ddb.url=jdbc:postgresql://postgres:5432/alfresco
@@ -46,8 +54,21 @@ services:
                 -Dcsrf.filter.enabled=false
                 -Ddsync.service.uris=http://localhost:9090/alfresco
                 -DtrialUid=id759203
-                -XX:MinRAMPercentage=50
                 -XX:MaxRAMPercentage=80"
+        volumes:
+            - ./data/acs:/usr/local/tomcat/alf_data/
+            - ./acs/alfresco-global.properties:/usr/local/tomcat/shared/classes/alfresco-global.properties
+            - ./acs/log4j.properties:/usr/local/tomcat/webapps/alfresco/WEB-INF/classes/log4j.properties
+        ports:
+            - 8082:8080 # Browser port
+            - 5005:5005 # Remote Debug
+        links:
+            - solr6
+            - postgres:postgres
+        depends_on:
+            - solr6
+            - postgres
+
     transform-router:
         mem_limit: 512m
         image: quay.io/alfresco/alfresco-transform-router:2.0.0
@@ -104,7 +125,7 @@ services:
             - "5432:5432"
 
     identity-service:
-        image: jboss/keycloak:3.4.3.Final
+        image: quay.io/keycloak/keycloak:21.1.1
         environment: 
             KEYCLOAK_USER: admin
             KEYCLOAK_PASSWORD: admin
@@ -113,8 +134,9 @@ services:
             POSTGRES_DATABASE: keycloak
             POSTGRES_USER: alfresco
             POSTGRES_PASSWORD: alfresco
+            ENTRYPOINT: "/opt/keycloak/bin/kc.sh"
         ports:
-            - "8081:8081"
+            - "8443:8443"
         depends_on:
             - postgres
 
@@ -150,16 +172,23 @@ services:
         image: quay.io/alfresco/alfresco-digital-workspace:3.1.0
         mem_limit: 128m
         environment:
-            APP_CONFIG_AUTH_TYPE: "BASIC"
-            BASE_PATH: ./
-            APP_BASE_SHARE_URL: "http://localhost:8080/workspace/#/preview/s"
+            APP_CONFIG_AUTH_TYPE: "OAUTH"
+#            BASE_PATH: ./
+            APP_BASE_SHARE_URL: "http://localhost:8080/share"
+    #        APP_CONFIG_OAUTH2_HOST: "https://api.asgardeo.io/t/squidroll/oauth2/authorize"
+            APP_CONFIG_OAUTH2_HOST: "http://localhost:8180/realms/alfresco/broker/oidc/endpoint"
+            APP_CONFIG_OAUTH2_CLIENTID: "alfresco"
+            APP_CONFIG_OAUTH2_IMPLICIT_FLOW: "\"true\""
+            APP_CONFIG_OAUTH2_SILENT_LOGIN: "\"true\""
+            APP_CONFIG_OAUTH2_REDIRECT_LOGIN: "/workspace/"
+            APP_CONFIG_OAUTH2_REDIRECT_LOGOUT: "/workspace/logout"
 
     control-center:
         image: quay.io/alfresco/alfresco-admin-app:7.6.0
         mem_limit: 128m
         environment:
-            APP_CONFIG_PROVIDER: "ECM"
-            APP_CONFIG_AUTH_TYPE: "BASIC"
+            APP_CONFIG_PROVIDER: ""
+            APP_CONFIG_AUTH_TYPE: "OAUTH"
             BASE_PATH: ./
 
     proxy:
@@ -181,7 +210,23 @@ services:
         image: quay.io/alfresco/service-sync:3.8.0
         mem_limit: 1g
         environment:
-            JAVA_OPTS: -Dsql.db.driver=org.postgresql.Driver -Dsql.db.url=jdbc:postgresql://postgres:5432/alfresco -Dsql.db.username=alfresco -Dsql.db.password=alfresco -Dmessaging.broker.host=activemq -Drepo.hostname=alfresco -Drepo.port=8080 -Ddw.server.applicationConnectors[0].type=http -XX:MinRAMPercentage=50 -XX:MaxRAMPercentage=80
+            JAVA_OPTS: 
+                -Dcom.sun.management.jmxremote=true
+                -Djava.rmi.server.hostname=localhost
+                -Dcom.sun.management.jmxremote.port=50800
+                -Dcom.sun.management.jmxremote.rmi.port=50800
+                -Dcom.sun.management.jmxremote.authenticate=false
+                -Dcom.sun.management.jmxremote.ssl=false
+                -Dsql.db.driver=org.postgresql.Driver 
+                -Dsql.db.url=jdbc:postgresql://postgres:5432/alfresco 
+                -Dsql.db.username=alfresco 
+                -Dsql.db.password=alfresco 
+                -Dmessaging.broker.host=activemq 
+                -Drepo.hostname=alfresco 
+                -Drepo.port=8080 
+                -Ddw.server.applicationConnectors[0].type=http 
+                -XX:MinRAMPercentage=50 
+                -XX:MaxRAMPercentage=80
         ports:
             - "9090:9090"
 
